@@ -207,7 +207,7 @@ func (t *Transaction) BeginCtx(ctx context.Context) (*Transaction, error) {
 	defer t.mu.Unlock()
 
 	t.savePointSequence++
-	sql := fmt.Sprintf("SAVEPOINT passport_%d", t.savePointSequence)
+	sql := fmt.Sprintf("SAVEPOINT savepoint_%d", t.savePointSequence)
 	_, err := t.Tx.Exec(ctx, sql)
 	if err != nil {
 		return nil, errors.Wrap("create savepoint", err)
@@ -229,7 +229,7 @@ func (t *Transaction) RollbackCtx(ctx context.Context) error {
 		return t.Tx.Rollback(context.Background())
 	}
 
-	sql := fmt.Sprintf("ROLLBACK TO SAVEPOINT passport_%d", t.savePointSequence)
+	sql := fmt.Sprintf("ROLLBACK TO SAVEPOINT savepoint_%d", t.savePointSequence)
 	_, err := t.Tx.Exec(ctx, sql)
 	t.savePointSequence--
 	if err != nil {
