@@ -2,7 +2,6 @@ package postgresql
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"time"
 
@@ -12,46 +11,14 @@ import (
 
 // Config struct for postgresql config
 type Config struct {
-	Port                 int           `mapstructure:"port"`
-	Host                 string        `mapstructure:"host"`
-	User                 string        `mapstructure:"user"`
-	Database             string        `mapstructure:"database"`
-	Password             string        `mapstructure:"password"`
-	Secured              bool          `mapstructure:"secured"`
-	MaxConnections       int32         `mapstructure:"max_connections"`
-	MinConnections       int32         `mapstructure:"min_connections"`
-	MaxConnectionAge     time.Duration `mapstructure:"max_connection_age"`
-	AcquireTimeout       time.Duration `mapstructure:"acquire_timeout"`
-	HealthCheckPeriod    time.Duration `mapstructure:"health_check_period"`
-	LoggerEnabled        bool          `mapstructure:"logger_enabled"`
-	KeepAlive            time.Duration `mapstructure:"keep_alive"`
-	Schema               string        `mapstructure:"schema"`
-	PreferSimpleProtocol bool          `mapstructure:"prefer_simple_protocol"`
-}
-
-// ConnString return connection string
-func (c Config) ConnString() string {
-	return c.ConnStringFor(c.Host)
-}
-
-func (c Config) ConnStringFor(host string) string {
-	connStr := fmt.Sprintf(
-		"host=%s port=%d user=%s sslmode=disable",
-		host, c.Port, c.User,
-	)
-	if c.Database != "" {
-		connStr = connStr + " dbname=" + c.Database
-	}
-	if c.Password != "" {
-		connStr = connStr + " password=" + c.Password
-	}
-	if c.Schema != "" {
-		connStr = connStr + " search_path=" + c.Schema
-	}
-	if c.PreferSimpleProtocol {
-		connStr += " prefer_simple_protocol=true"
-	}
-	return connStr
+	DSN               string        `mapstructure:"dsn"`
+	MaxConnections    int32         `mapstructure:"max_connections"`
+	MinConnections    int32         `mapstructure:"min_connections"`
+	MaxConnectionAge  time.Duration `mapstructure:"max_connection_age"`
+	AcquireTimeout    time.Duration `mapstructure:"acquire_timeout"`
+	HealthCheckPeriod time.Duration `mapstructure:"health_check_period"`
+	LoggerEnabled     bool          `mapstructure:"logger_enabled"`
+	KeepAlive         time.Duration `mapstructure:"keep_alive"`
 }
 
 type wrappedDialer struct {
@@ -100,7 +67,7 @@ type ConnectionPoolOption func(*ConnectionPool) error
 
 // NewConnectionPool return new Connection Pool
 func NewConnectionPool(conf Config, opts ...ConnectionPoolOption) (DB, error) {
-	poolConfig, err := pgxpool.ParseConfig(conf.ConnString())
+	poolConfig, err := pgxpool.ParseConfig(conf.DSN)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +114,7 @@ func (c Config) ApplyPoolConfig(poolConfig *pgxpool.Config) {
 func ReplicaPoolsFromConfig(replicaConfigs ...Config) ([]*pgxpool.Pool, error) {
 	var replicas []*pgxpool.Pool
 	for _, conf := range replicaConfigs {
-		replicaPoolConfig, err := pgxpool.ParseConfig(conf.ConnString())
+		replicaPoolConfig, err := pgxpool.ParseConfig(conf.DSN)
 		if err != nil {
 			return nil, err
 		}
