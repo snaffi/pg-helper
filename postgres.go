@@ -13,18 +13,14 @@ import (
 
 // DB interface for work with DB
 type DB interface {
-	Exec(sql string, args ...interface{}) (commandTag pgconn.CommandTag, err error)
-	ExecCtx(ctx context.Context, sql string, args ...interface{}) (commandTag pgconn.CommandTag, err error)
-	Query(sql string, args ...interface{}) (pgx.Rows, error)
-	QueryCtx(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
-	QueryRow(sql string, args ...interface{}) pgx.Row
-	QueryRowCtx(ctx context.Context, sql string, args ...interface{}) pgx.Row
-	ReplicaQuery(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
-	ReplicaQueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (commandTag pgconn.CommandTag, err error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	ReplicaQuery(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
-	Begin() (*Transaction, error)
-	BeginCtx(ctx context.Context) (*Transaction, error)
-	RunTx(fn func(tx *Transaction) error) error
+	Begin(ctx context.Context) (*Transaction, error)
+	RunTx(ctx context.Context, fn func(tx *Transaction) error) error
 	Statistics() *pgxpool.Stat
 	Close() error
 	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
@@ -34,7 +30,7 @@ type errRow struct {
 	error
 }
 
-func (er errRow) Scan(...interface{}) error {
+func (er errRow) Scan(...any) error {
 	return er.error
 }
 
@@ -44,43 +40,28 @@ type ConnectionPool struct {
 	ReplicaSet ReplicaSet
 }
 
-// Exec sql
-func (p *ConnectionPool) Exec(sql string, args ...interface{}) (commandTag pgconn.CommandTag, err error) {
-	return p.ExecCtx(context.Background(), sql, args...)
-}
-
 // Query sql
-func (p *ConnectionPool) Query(sql string, args ...interface{}) (pgx.Rows, error) {
-	return p.QueryCtx(context.Background(), sql, args...)
-}
-
-// QueryRow sql
-func (p *ConnectionPool) QueryRow(sql string, args ...interface{}) pgx.Row {
-	return p.QueryRowCtx(context.Background(), sql, args...)
-}
-
-// ExecCtx exec sql with context
-func (p *ConnectionPool) ExecCtx(ctx context.Context, sql string, arguments ...interface{}) (commandTag pgconn.CommandTag, err error) {
-	return p.Pool.Exec(ctx, sql, arguments...)
-}
-
-// QueryCtx query sql with context
-func (p *ConnectionPool) QueryCtx(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+func (p *ConnectionPool) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	return p.Pool.Query(ctx, sql, args...)
 }
 
-// QueryRowCtx query row with context
-func (p *ConnectionPool) QueryRowCtx(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+// QueryRow sql
+func (p *ConnectionPool) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return p.Pool.QueryRow(ctx, sql, args...)
 }
 
+// Exec  sql with context
+func (p *ConnectionPool) Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error) {
+	return p.Pool.Exec(ctx, sql, arguments...)
+}
+
 // ReplicaQuery query sql on replica with context
-func (p *ConnectionPool) ReplicaQuery(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+func (p *ConnectionPool) ReplicaQuery(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	return p.ReplicaSet.Replica(ctx).Query(ctx, sql, args...)
 }
 
 // ReplicaQueryRow query row on replica with context
-func (p *ConnectionPool) ReplicaQueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (p *ConnectionPool) ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return p.ReplicaSet.Replica(ctx).QueryRow(ctx, sql, args...)
 }
 
@@ -89,13 +70,8 @@ func (p *ConnectionPool) ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx
 	return p.ReplicaSet.Replica(ctx).SendBatch(ctx, b)
 }
 
-// Begin return new transaction
-func (p *ConnectionPool) Begin() (*Transaction, error) {
-	return p.BeginCtx(context.Background())
-}
-
-// BeginCtx return new transaction with context
-func (p *ConnectionPool) BeginCtx(ctx context.Context) (*Transaction, error) {
+// Begin return new transaction with context
+func (p *ConnectionPool) Begin(ctx context.Context) (*Transaction, error) {
 	tx, err := p.Pool.Begin(ctx)
 	if err != nil {
 		return nil, errors.Wrap("create transaction", err)
@@ -107,9 +83,9 @@ func (p *ConnectionPool) BeginCtx(ctx context.Context) (*Transaction, error) {
 }
 
 // RunTx exec sql with transaction
-func (p *ConnectionPool) RunTx(fn func(tx *Transaction) error) error {
+func (p *ConnectionPool) RunTx(ctx context.Context, fn func(tx *Transaction) error) error {
 	var err error
-	tx, err := p.Begin()
+	tx, err := p.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -152,45 +128,35 @@ type Transaction struct {
 	savePointSequence uint8
 }
 
-
 // Exec sql
-func (t *Transaction) Exec(sql string, arguments ...interface{}) (commandTag pgconn.CommandTag, err error) {
-	return t.ExecCtx(context.Background(), sql, arguments...)
-}
 
-// ExecCtx exec sql with context
-func (t *Transaction) ExecCtx(ctx context.Context, sql string, arguments ...interface{}) (commandTag pgconn.CommandTag, err error) {
+// Exec sql with context
+func (t *Transaction) Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error) {
 	return t.Tx.Exec(ctx, sql, arguments...)
 }
 
-// Query sql
-func (t *Transaction) Query(sql string, args ...interface{}) (pgx.Rows, error) {
-	return t.QueryCtx(context.Background(), sql, args...)
-}
-
-// QueryCtx query sql with context
-func (t *Transaction) QueryCtx(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+// Query sql with context
+func (t *Transaction) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	return t.Tx.Query(ctx, sql, args...)
 }
 
 // QueryRow sql
-func (t *Transaction) QueryRow(sql string, args ...interface{}) pgx.Row {
+func (t *Transaction) QueryRow(sql string, args ...any) pgx.Row {
 	return t.QueryRowCtx(context.Background(), sql, args...)
 }
 
 // QueryRowCtx query row with context
-func (t *Transaction) QueryRowCtx(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (t *Transaction) QueryRowCtx(ctx context.Context, sql string, args ...any) pgx.Row {
 	return t.Tx.QueryRow(ctx, sql, args...)
 }
 
-func (t *Transaction) ReplicaQuery(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
-	return t.QueryCtx(ctx, sql, args...)
+func (t *Transaction) ReplicaQuery(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	return t.Query(ctx, sql, args...)
 }
 
-func (t *Transaction) ReplicaQueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (t *Transaction) ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return t.QueryRowCtx(ctx, sql, args...)
 }
-
 
 func (t *Transaction) ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
 	return t.SendBatch(ctx, b)
