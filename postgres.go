@@ -140,13 +140,8 @@ func (t *Transaction) Query(ctx context.Context, sql string, args ...any) (pgx.R
 	return t.Tx.Query(ctx, sql, args...)
 }
 
-// QueryRow sql
-func (t *Transaction) QueryRow(sql string, args ...any) pgx.Row {
-	return t.QueryRowCtx(context.Background(), sql, args...)
-}
-
-// QueryRowCtx query row with context
-func (t *Transaction) QueryRowCtx(ctx context.Context, sql string, args ...any) pgx.Row {
+// QueryRow query row with context
+func (t *Transaction) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return t.Tx.QueryRow(ctx, sql, args...)
 }
 
@@ -155,20 +150,15 @@ func (t *Transaction) ReplicaQuery(ctx context.Context, sql string, args ...any)
 }
 
 func (t *Transaction) ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return t.QueryRowCtx(ctx, sql, args...)
+	return t.QueryRow(ctx, sql, args...)
 }
 
 func (t *Transaction) ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
 	return t.SendBatch(ctx, b)
 }
 
-// Begin create savepoint
-func (t *Transaction) Begin() (*Transaction, error) {
-	return t.BeginCtx(context.Background())
-}
-
-// BeginCtx create savepoint with context
-func (t *Transaction) BeginCtx(ctx context.Context) (*Transaction, error) {
+// Begin create savepoint with context
+func (t *Transaction) Begin(ctx context.Context) (*Transaction, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -223,8 +213,8 @@ func (t *Transaction) CommitCtx(ctx context.Context) error {
 }
 
 // RunTx exec sql with transaction
-func (t *Transaction) RunTx(fn func(tx *Transaction) error) error {
-	tx, err := t.Begin()
+func (t *Transaction) RunTx(ctx context.Context, fn func(tx *Transaction) error) error {
+	tx, err := t.Begin(ctx)
 	if err != nil {
 		return err
 	}
