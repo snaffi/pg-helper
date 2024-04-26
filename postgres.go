@@ -11,27 +11,25 @@ import (
 	"github.com/snaffi/errors"
 )
 
-// DB interface for work with DB
-type DB interface {
-	Exec(ctx context.Context, sql string, args ...any) (commandTag pgconn.CommandTag, err error)
+type Read interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	ReplicaQuery(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
+}
+
+type Write interface {
+	Exec(ctx context.Context, sql string, args ...any) (commandTag pgconn.CommandTag, err error)
 	Begin(ctx context.Context) (*Transaction, error)
 	RunTx(ctx context.Context, fn func(tx *Transaction) error) error
-	Statistics() *pgxpool.Stat
-	Close() error
 	SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults
 }
 
-type errRow struct {
-	error
-}
-
-func (er errRow) Scan(...any) error {
-	return er.error
+// DB interface for work with DB
+type DB interface {
+	Read
+	Write
+	Replica() Read
+	Statistics() *pgxpool.Stat
+	Close() error
 }
 
 // ConnectionPool is struct with connection pool
@@ -53,21 +51,6 @@ func (p *ConnectionPool) QueryRow(ctx context.Context, sql string, args ...any) 
 // Exec  sql with context
 func (p *ConnectionPool) Exec(ctx context.Context, sql string, arguments ...any) (commandTag pgconn.CommandTag, err error) {
 	return p.Pool.Exec(ctx, sql, arguments...)
-}
-
-// ReplicaQuery query sql on replica with context
-func (p *ConnectionPool) ReplicaQuery(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	return p.ReplicaSet.Replica(ctx).Query(ctx, sql, args...)
-}
-
-// ReplicaQueryRow query row on replica with context
-func (p *ConnectionPool) ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return p.ReplicaSet.Replica(ctx).QueryRow(ctx, sql, args...)
-}
-
-// ReplicaSendBatch send pgx batch on replica
-func (p *ConnectionPool) ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
-	return p.ReplicaSet.Replica(ctx).SendBatch(ctx, b)
 }
 
 // Begin return new transaction with context
@@ -121,6 +104,13 @@ func (p *ConnectionPool) Close() error {
 	return nil
 }
 
+func (p *ConnectionPool) Replica() Read {
+	return &ConnectionPool{
+		p.ReplicaSet.Replica(),
+		p.ReplicaSet,
+	}
+}
+
 // Transaction ...
 type Transaction struct {
 	pgx.Tx
@@ -143,18 +133,6 @@ func (t *Transaction) Query(ctx context.Context, sql string, args ...any) (pgx.R
 // QueryRow query row with context
 func (t *Transaction) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return t.Tx.QueryRow(ctx, sql, args...)
-}
-
-func (t *Transaction) ReplicaQuery(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	return t.Query(ctx, sql, args...)
-}
-
-func (t *Transaction) ReplicaQueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return t.QueryRow(ctx, sql, args...)
-}
-
-func (t *Transaction) ReplicaSendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
-	return t.SendBatch(ctx, b)
 }
 
 // Begin create savepoint with context
@@ -247,9 +225,5 @@ func (t *Transaction) CloseCtx(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	_ = t.Tx.Rollback(ctx)
-	return nil
-}
-
-func (t *Transaction) Statistics() *pgxpool.Stat {
 	return nil
 }

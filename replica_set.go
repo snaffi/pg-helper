@@ -1,14 +1,13 @@
 package postgresql
 
 import (
-	"context"
 	"sync/atomic"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ReplicaSet interface {
-	Replica(ctx context.Context) *pgxpool.Pool
+	Replica() *pgxpool.Pool
 	Close()
 }
 
@@ -29,7 +28,7 @@ func NewRoundRobinReplicaSet(replicas []*pgxpool.Pool) *RoundRobinReplicaSet {
 	}
 }
 
-func (rs *RoundRobinReplicaSet) Replica(ctx context.Context) *pgxpool.Pool {
+func (rs *RoundRobinReplicaSet) Replica() *pgxpool.Pool {
 	if len(rs.replicas) == 1 {
 		return rs.replicas[0]
 	}
