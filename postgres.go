@@ -227,3 +227,11 @@ func (t *Transaction) CloseCtx(ctx context.Context) error {
 	_ = t.Tx.Rollback(ctx)
 	return nil
 }
+
+func (t *Transaction) Replica() Read {
+	return t
+}
+
+func (t *Transaction) Statistics() *pgxpool.Stat {
+	return nil
+}
