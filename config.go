@@ -2,11 +2,11 @@ package postgresql
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog/log"
 )
 
 // Config struct for postgresql config
@@ -28,15 +28,25 @@ type wrappedDialer struct {
 func (d *wrappedDialer) DialContext(ctx context.Context, network, address string) (conn net.Conn, err error) {
 	start := time.Now()
 	defer func() {
-		l := log.Debug().
-			Str("component", "pgx").
-			Dur("duration", time.Since(start)).
-			Str("network", network).
-			Str("address", address)
+
 		if err != nil {
-			l = l.Err(err)
+			slog.ErrorContext(
+				ctx, "dial postgres",
+				"component", "pgx",
+				"network", network,
+				"address", address,
+				"duration", time.Since(start),
+				"error", err,
+			)
+		} else {
+			slog.DebugContext(
+				ctx, "dial postgres",
+				"component", "pgx",
+				"network", network,
+				"address", address,
+				"duration", time.Since(start),
+			)
 		}
-		l.Msg("dial postgres")
 	}()
 	conn, err = d.Dialer.DialContext(ctx, network, address)
 	return
@@ -49,15 +59,24 @@ type wrappedResolver struct {
 func (r *wrappedResolver) LookupHost(ctx context.Context, host string) (addrs []string, err error) {
 	start := time.Now()
 	defer func() {
-		l := log.Debug().
-			Str("component", "pgx").
-			Dur("duration", time.Since(start)).
-			Str("host", host).
-			Strs("resolved_addrs", addrs)
 		if err != nil {
-			l = l.Err(err)
+			slog.ErrorContext(
+				ctx, "resolve postgres host",
+				"component", "pgx",
+				"host", host,
+				"resolved_addresses", addrs,
+				"duration", time.Since(start),
+				"error", err,
+			)
+		} else {
+			slog.DebugContext(
+				ctx, "resolve postgres host",
+				"component", "pgx",
+				"host", host,
+				"resolved_addrs", addrs,
+				"duration", time.Since(start),
+			)
 		}
-		l.Msg("resolve postgres host")
 	}()
 	addrs, err = r.Resolver.LookupHost(ctx, host)
 	return
